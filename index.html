@@ -89,8 +89,9 @@ footer{text-align:center;color:var(--muted);padding:35px 20px;font-size:12px}
 </main>
 <footer>SiRa Automations · Prototype for demonstration only · No information is sent or stored.</footer>
 <script>
+  const WEBHOOK_URL = "https://examinations-nashville-entitled-current.trycloudflare.com/webhook/276e2628-7e69-4111-a63c-28ec5ce38123";
 const $=id=>document.getElementById(id);
-$("leadForm").addEventListener("submit",function(e){
+$("leadForm").addEventListener("submit",async function(e){
   e.preventDefault();
   const name=$("name").value.trim();
   const company=$("company").value.trim();
@@ -98,21 +99,35 @@ $("leadForm").addEventListener("submit",function(e){
   const service=$("service").value;
   const message=$("message").value.trim();
   const text=message.toLowerCase();
-  const urgentWords=["urgent","asap","immediately","today","deadline","launch","delay","lost","missed"];
-  const signals=urgentWords.filter(w=>text.includes(w));
-  const high=signals.length>=2 || /urgent|asap|immediately|today/.test(text);
-  const medium=!high && (text.length>100 || /need|looking|interested|automate|follow.up/.test(text));
-  const level=high?"HIGH":medium?"MEDIUM":"NORMAL";
-  $("priority").textContent=level+" PRIORITY";
-  $("priority").style.background=high?"#512a35":medium?"#514126":"#1c3550";
-  $("priority").style.color=high?"#ffb4c0":medium?"#ffd78b":"#8dd8ff";
-  $("action").textContent=high?"Contact promptly":medium?"Schedule follow-up":"Review lead";
-  $("summary").textContent=company+" is asking about "+service.toLowerCase()+". The inquiry contains "+message.length+" characters. "+(signals.length?"Potential urgency signals: "+signals.join(", ")+".":"No obvious urgency keywords detected.")+" Priority is based on simple demo rules, not AI.";
-  $("draft").textContent="Subject: Following up on your "+service.toLowerCase()+" inquiry\n\nHi "+name+",\n\nThank you for reaching out to SiRa Automations. I understand that "+message.slice(0,220)+(message.length>220?"…":"")+"\n\nWe'd be happy to learn more about your workflow and explore a suitable solution. Would you be available for a brief discovery call?\n\nBest regards,\nSiRa Automations";
-  $("empty").style.display="none";
-  $("result").style.display="block";
-  $("notice").textContent="Demo mode: analysis uses local rules. No email was sent. No data was uploaded.";
-});
+      let result;
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, company, email, service, inquiry: message })
+      });
+
+      if (!response.ok) {
+        throw new Error("Webhook request failed: " + response.status);
+      }
+
+      result = await response.json();
+
+      $("priority").textContent = (result.priority || "NORMAL") + " PRIORITY";
+      $("action").textContent = result.next_action || "Review lead";
+      $("summary").textContent = result.summary || "Lead analysis completed.";
+
+      $("draft").textContent = result.follow_up_email ||
+        "Subject: Following up on your inquiry\n\nHi " + name +
+        ",\n\nThank you for contacting SiRa Automations. We will review your requirements and follow up shortly.";
+
+      $("empty").style.display = "none";
+      $("result").style.display = "block";
+      $("notice").textContent = "Workflow response received. No email was sent automatically.";
+    } catch (error) {
+      $("notice").textContent =
+        "Could not reach the workflow. Please try again. Details: " + error.message;
+    }
 $("copy").addEventListener("click",async()=>{
   const draft=$("draft").textContent;
   try{await navigator.clipboard.writeText(draft);$("notice").textContent="Draft copied. No email was sent."}
